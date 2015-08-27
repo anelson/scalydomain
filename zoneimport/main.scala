@@ -19,6 +19,9 @@ case class DomainName(val name: String, val hash: Array[Byte])
 case class CliOptions(domainDbFile: File = new File("."), zoneFiles: Seq[File] = Seq())
 
 object ZoneImport {
+	val WriteBatchSize = 10 * 1024
+	val CacheSize = 256 * 1024 * 1024
+
   def main(args: Array[String]): Unit = {
 		val optParser = new scopt.OptionParser[CliOptions]("zoneimport") {
 		  head("zoneimport", "SNAPSHOT")
@@ -46,7 +49,7 @@ object ZoneImport {
   		return
   	}
 
-  	val queue = new LinkedBlockingQueue[Option[DomainName]](10*1024)
+  	val queue = new LinkedBlockingQueue[Option[DomainName]](WriteBatchSize)
 
   	println("Starting writer")
   	val writer = Future {
@@ -56,8 +59,12 @@ object ZoneImport {
   		val options = new Options()
 
   		options.createIfMissing(true)
+  		options.cacheSize(CacheSize)
 
   		val db = factory.open(config.domainDbFile, options)
+  		var batch = db.createWriteBatch()
+  		var batchSize = 0
+
   		try {
 	  		var eof = false
 
@@ -67,8 +74,15 @@ object ZoneImport {
 	  					val name = domain.name
 	  					val hash = domain.hash
 
-  						db.put(hash, name.getBytes("UTF-8"))
+  						batch.put(hash, name.getBytes("UTF-8"))
   						count = count + 1
+  						batchSize = batchSize + 1
+
+  						if (batchSize >= WriteBatchSize) {
+  							db.write(batch)
+  							batch.close()
+  							batch = db.createWriteBatch()
+  						}
 						}
 
 						case None => {
@@ -78,9 +92,15 @@ object ZoneImport {
 					}
 				}
 
+				db.write(batch)
+				batch.close()
+
 				println("Compacting domain database")
 				db.compactRange(null, null)
+
+				println(db.getProperty("leveldb.stats"))
   		} finally {
+  			batch.close()
   			db.close()
   		}
 
