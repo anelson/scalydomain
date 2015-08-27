@@ -9,10 +9,9 @@ import ExecutionContext.Implicits.global
 
 import scalydomain.core.DomainDb
 import scalydomain.core.ModelDb
+import scalydomain.core.MarkovChain
 
 case class CliOptions(domainDbFile: File = new File("."), modelDbFile: File = new File("."), ngramSize: Int = 2)
-
-case class NGram(ngram: String)
 
 object Train {
   def main(args: Array[String]): Unit = {
@@ -28,22 +27,24 @@ object Train {
 
   	val config = optParser.parse(args, CliOptions()).get
 
-  	val queue = new LinkedBlockingQueue[Option[NGram]](ModelDb.WriteBatchSize)
+  	val queue = new LinkedBlockingQueue[Option[String]](ModelDb.WriteBatchSize)
 
   	println("Starting writer")
   	val writer = Future {
   		println(s"Writing model to ${config.modelDbFile.getPath}")
 
   		var count: Long = 0
+  		ModelDb.delete(config.modelDbFile.getPath())
   		val modelDb = new ModelDb(config.modelDbFile.getPath())
+  		val markov = new MarkovChain(modelDb, config.ngramSize)
 
   		try {
 	  		var eof = false
 
 				while(!eof) {
 					queue.take match {
-						case Some(ngram) => {
-							//modelDb.write(domain.name, domain.hash)
+						case Some(text) => {
+							markov.learn(text)
   						count = count + 1
 						}
 
@@ -58,6 +59,8 @@ object Train {
 				modelDb.compact()
 
 				println(modelDb.stats)
+
+				//modelDb.dump()
   		} finally {
   			modelDb.close()
   		}
@@ -73,6 +76,7 @@ object Train {
   			var count: Long = 0
 
   			for ((hash, name) <- domainDb.domains) {
+  				queue.put(Some(name))
   				count = count + 1
   			}
 
@@ -89,3 +93,4 @@ object Train {
   	println(s"Wrote $writeCount")
   }
 }
+

@@ -12,7 +12,10 @@ lazy val commonSettings = Seq(
   	"org.fusesource.leveldbjni" % "leveldbjni-osx" % "1.8",
 	  "com.typesafe.akka" %% "akka-actor" % "2.3.+",
 	  "com.github.scopt" %% "scopt" % "3.3.0",
-	  "org.msgpack" %% "msgpack-scala" % "0.6.11"
+	  "org.msgpack" %% "msgpack-scala" % "0.6.11",
+	  "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
+	  "ch.qos.logback" % "logback-core" % "1.1+",
+	  "ch.qos.logback" % "logback-classic" % "1.1.+"
 	)
 )
 
