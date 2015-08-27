@@ -7,8 +7,8 @@ import scala.concurrent.duration._
 import scala.collection.JavaConversions._
 import ExecutionContext.Implicits.global
 
-import org.fusesource.lmdbjni.{Env, Database, LMDBException, Constants}
-import org.fusesource.lmdbjni.Constants._
+import org.iq80.leveldb.{Options}
+import org.iq80.leveldb.impl.Iq80DBFactory.{factory}
 
 import scalydomain.core.ZoneFile
 
@@ -36,32 +36,33 @@ object ZoneImport {
 
   	println("Starting writer")
   	val writer = Future {
-  		val env = new Env("data/domains.lmdb")
-  		val db = env.openDatabase()
-
   		var count: Long = 0
-  		var eof = false
+  		val options = new Options()
+  		options.createIfMissing(true)
 
-			while(!eof) {
-				queue.take match {
-					case Some(domain) => {
-  					val name = domain.name
-  					val hash = domain.hash
+  		val db = factory.open(new java.io.File("data/domains.leveldb"), options)
+  		try {
+	  		var eof = false
 
-  					try {
-  						db.put(hash, name.getBytes("UTF-8"), Constants.NOOVERWRITE)
+				while(!eof) {
+					queue.take match {
+						case Some(domain) => {
+	  					val name = domain.name
+	  					val hash = domain.hash
+
+  						db.put(hash, name.getBytes("UTF-8"))
   						count = count + 1
-						} catch {
-							case e: LMDBException if e.getErrorCode() == LMDBException.KEYEXIST => {}
+						}
+
+						case None => {
+							println("Writer shutting down")
+							eof = true
 						}
 					}
-
-					case None => {
-						println("Writer shutting down")
-						eof = true
-					}
 				}
-			}
+  		} finally {
+  			db.close()
+  		}
 
   		count
   	}

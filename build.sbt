@@ -11,8 +11,7 @@ lazy val core = (project in file("core")).
 	).
 	settings (
 		libraryDependencies ++= Seq(
-	  	"org.deephacks.lmdbjni" % "lmdbjni" % "0.4.+",
-	  	"org.deephacks.lmdbjni" % "lmdbjni-osx64" % "0.4.+"
+	  	"org.iq80.leveldb" % "leveldb" % "0.7"
   	)
 	)
 
