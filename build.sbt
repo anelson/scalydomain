@@ -11,7 +11,8 @@ lazy val core = (project in file("core")).
 	).
 	settings (
 		libraryDependencies ++= Seq(
-	  	"org.deephacks.lmdbjni" % "lmdbjni" % "0.4.+"
+	  	"org.deephacks.lmdbjni" % "lmdbjni" % "0.4.+",
+	  	"org.deephacks.lmdbjni" % "lmdbjni-osx64" % "0.4.+"
   	)
 	)
 
@@ -20,6 +21,11 @@ lazy val zoneimport = (project in file("zoneimport")).
 	settings(commonSettings: _*).
 	settings(
 	  name := "scalydomain-zoneimport"
+	).
+	settings (
+		libraryDependencies ++= Seq(
+	  	"com.typesafe.akka" %% "akka-actor" % "2.3.+"
+  	)
 	)
 
 lazy val train = (project in file("train")).
