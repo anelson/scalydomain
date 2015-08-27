@@ -1,7 +1,9 @@
 lazy val commonSettings = Seq(
 	organization := "org.apocryph",
   version := "1.0",
-  scalaVersion := "2.11.7"
+  scalaVersion := "2.11.7",
+
+	resolvers += Resolver.sonatypeRepo("public")
 )
 
 lazy val core = (project in file("core")).
@@ -14,7 +16,6 @@ lazy val core = (project in file("core")).
 	  	"org.iq80.leveldb" % "leveldb" % "0.7"
   	)
 	)
-
 lazy val zoneimport = (project in file("zoneimport")).
 	dependsOn(core).
 	settings(commonSettings: _*).
@@ -23,7 +24,8 @@ lazy val zoneimport = (project in file("zoneimport")).
 	).
 	settings (
 		libraryDependencies ++= Seq(
-	  	"com.typesafe.akka" %% "akka-actor" % "2.3.+"
+	  	"com.typesafe.akka" %% "akka-actor" % "2.3.+",
+	  	 "com.github.scopt" %% "scopt" % "3.3.0"
   	)
 	)
 

@@ -1,5 +1,6 @@
 package scalydomain
 
+import java.io.File
 import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 import java.security.MessageDigest
 import scala.concurrent._
@@ -14,11 +15,23 @@ import scalydomain.core.ZoneFile
 
 case class DomainName(val name: String, val hash: Array[Byte])
 
+case class CliOptions(domainDbFile: File = new File("."), zoneFiles: Seq[File] = Seq())
+
 object ZoneImport {
   def main(args: Array[String]): Unit = {
-  	val zonefiles: Seq[ZoneFile] = args.flatMap { a =>
+		val optParser = new scopt.OptionParser[CliOptions]("zoneimport") {
+		  head("zoneimport", "SNAPSHOT")
+		  arg[File]("<domain db file>") required() action { (x, c) =>
+		    c.copy(domainDbFile = x) } text("Path to domain database file which will be populated by this command")
+		  arg[File]("<zonefilefile>...") unbounded() required() action { (x, c) =>
+		    c.copy(zoneFiles = c.zoneFiles :+ x) } text("DNS zone file(s) to import")
+		}
+
+  	val config = optParser.parse(args, CliOptions()).get
+
+  	val zonefiles: Seq[ZoneFile] = config.zoneFiles.flatMap { a =>
   		try {
-  			Some(new ZoneFile(a))
+  			Some(new ZoneFile(a.getPath))
   		} catch {
   			case e: Exception => {
   				println(s"Error reading zonefile $a: $e")
@@ -36,11 +49,14 @@ object ZoneImport {
 
   	println("Starting writer")
   	val writer = Future {
+  		println(s"Writing domains to ${config.domainDbFile.getPath}")
+
   		var count: Long = 0
   		val options = new Options()
+
   		options.createIfMissing(true)
 
-  		val db = factory.open(new java.io.File("data/domains.leveldb"), options)
+  		val db = factory.open(config.domainDbFile, options)
   		try {
 	  		var eof = false
 
