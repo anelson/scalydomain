@@ -11,7 +11,8 @@ lazy val commonSettings = Seq(
 	libraryDependencies ++= Seq(
   	"org.fusesource.leveldbjni" % "leveldbjni-osx" % "1.8",
 	  "com.typesafe.akka" %% "akka-actor" % "2.3.+",
-	  "com.github.scopt" %% "scopt" % "3.3.0"
+	  "com.github.scopt" %% "scopt" % "3.3.0",
+	  "org.msgpack" %% "msgpack-scala" % "0.6.11"
 	)
 )
 

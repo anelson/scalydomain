@@ -1,11 +1,21 @@
 package scalydomain.core
 
 import java.io.File
-import java.lang.ThreadLocal
 import java.security.MessageDigest
+
+import scala.collection.mutable.Map
+
+import org.msgpack.annotation.Message
+import org.msgpack.ScalaMessagePack
 
 import org.iq80.leveldb.{Options}
 import org.fusesource.leveldbjni.JniDBFactory.{factory}
+
+@Message
+class NgramEntry {
+	var allNextNgramsSum: Long = 0
+	var nextNgrams: Map[String, Long] = Map.empty
+}
 
 object ModelDb {
 	val WriteBatchSize = 10 * 1024
@@ -24,6 +34,19 @@ class ModelDb(val path: String) {
 	val db = factory.open(file, options)
 	var batch = db.createWriteBatch()
 	var batchSize = 0
+
+	def addNgramNextSymbol(ngram: String, nextNgram: String) {
+		val key = ngram.getBytes("UTF-8")
+		val entry = db.get(key) match {
+			case existingEntryBytes if existingEntryBytes != null => ScalaMessagePack.read[NgramEntry](existingEntryBytes)
+			case null => new NgramEntry()
+		}
+
+		entry.nextNgrams(nextNgram) = entry.nextNgrams.getOrElse(nextNgram, 0l) + 1l
+		entry.allNextNgramsSum += 1
+
+		db.put(key, ScalaMessagePack.write(entry))
+	}
 
 	def close() {
 		db.write(batch)
