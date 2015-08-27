@@ -44,6 +44,23 @@ class DomainDb(val path: String) {
 		}
 	}
 
+	def domains = {
+		new Iterator[(Array[Byte], String)] {
+			val iter = db.iterator()
+			iter.seekToFirst()
+
+			def hasNext = iter.hasNext
+
+			def next = {
+				val key = iter.peekNext().getKey()
+				val value = new String(iter.peekNext.getValue(), "UTF-8")
+				iter.next()
+
+				(key, value)
+			}
+		}
+	}
+
 	def close() {
 		db.write(batch)
 		batch.close()

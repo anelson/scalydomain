@@ -72,6 +72,11 @@ object Train {
   			val domainDb = new DomainDb(config.domainDbFile.getPath())
   			var count: Long = 0
 
+  			for ((hash, name) <- domainDb.domains) {
+  				count = count + 1
+  			}
+
+  			println(s"Read $count domains")
   			count
   	}
 
