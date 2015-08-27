@@ -3,7 +3,11 @@ lazy val commonSettings = Seq(
   version := "1.0",
   scalaVersion := "2.11.7",
 
-	resolvers += Resolver.sonatypeRepo("public")
+	resolvers += Resolver.sonatypeRepo("public"),
+
+	fork in run := true,
+	fork in test := true,
+	baseDirectory in run := file(".")
 )
 
 lazy val core = (project in file("core")).
@@ -13,7 +17,7 @@ lazy val core = (project in file("core")).
 	).
 	settings (
 		libraryDependencies ++= Seq(
-	  	"org.iq80.leveldb" % "leveldb" % "0.7"
+	  	"org.fusesource.leveldbjni" % "leveldbjni-osx" % "1.8"
   	)
 	)
 lazy val zoneimport = (project in file("zoneimport")).

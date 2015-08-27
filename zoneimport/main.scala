@@ -9,7 +9,8 @@ import scala.collection.JavaConversions._
 import ExecutionContext.Implicits.global
 
 import org.iq80.leveldb.{Options}
-import org.iq80.leveldb.impl.Iq80DBFactory.{factory}
+//import org.iq80.leveldb.impl.Iq80DBFactory.{factory}
+import org.fusesource.leveldbjni.JniDBFactory.{factory}
 
 import scalydomain.core.ZoneFile
 
@@ -76,6 +77,9 @@ object ZoneImport {
 						}
 					}
 				}
+
+				println("Compacting domain database")
+				db.compactRange(null, null)
   		} finally {
   			db.close()
   		}
