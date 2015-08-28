@@ -61,6 +61,16 @@ class DomainDb(val path: String) {
 		}
 	}
 
+	def domainExists(domain: String): Boolean = {
+		domainExists(DomainDb.computeDomainHash(domain))
+	}
+
+	def domainExists(hash: Array[Byte]): Boolean = {
+		val entry = db.get(hash)
+
+		entry != null
+	}
+
 	def close() {
 		db.write(batch)
 		batch.close()

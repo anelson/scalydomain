@@ -4,6 +4,8 @@ import java.io.File
 import java.security.MessageDigest
 
 import scala.collection.mutable.Map
+import scala.util.Random
+import scala.util.control.Breaks._
 
 import org.msgpack.annotation.Message
 import org.msgpack.ScalaMessagePack
@@ -15,6 +17,22 @@ import org.fusesource.leveldbjni.JniDBFactory.{factory}
 class NgramEntry {
 	var allNextSymbolsSum: Long = 0
 	var nextSymbols: Map[String, Long] = Map.empty
+
+	def chooseNextSymbol(rand: Random): Option[String] = {
+		val index = rand.nextLong() % allNextSymbolsSum
+		var sum = 0l
+
+		nextSymbols.foreach { case (sym, count) =>
+			sum += count
+
+			if (sum > index) {
+				return Some(sym)
+			}
+		}
+
+		assert(false)
+		None
+	}
 }
 
 object ModelDb {
@@ -53,6 +71,13 @@ class ModelDb(val path: String) {
 		entry.allNextSymbolsSum += 1
 
 		db.put(key, writeEntry(entry))
+	}
+
+	def lookupNgram(ngram: String) =  {
+		db.get(ngram.getBytes()) match {
+			case entry if entry != null => Some(readEntry(entry))
+			case null => None
+		}
 	}
 
 	def close() {
