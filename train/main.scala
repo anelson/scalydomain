@@ -91,6 +91,10 @@ object Train {
   			for ((hash, name) <- domainDb.domains) {
   				queue.put(Some(name))
   				count = count + 1
+
+  				if (count % 1000000 == 0) {
+  					println(s"Processed $count domains")
+  				}
   			}
 
   			println(s"Read $count domains")
