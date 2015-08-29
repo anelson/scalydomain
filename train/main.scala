@@ -11,7 +11,12 @@ import scalydomain.core.DomainDb
 import scalydomain.core.ModelDb
 import scalydomain.core.MarkovChain
 
-case class CliOptions(domainDbFile: File = new File("."), modelDbFile: File = new File("."), ngramSize: Int = 2)
+case class CliOptions(domainDbFile: File = new File("."),
+	modelDbFile: File = new File("."),
+	ngramSize: Int = 2,
+	maxLength: Int = -1,
+	includePunycode: Boolean = false
+)
 
 object Train {
   def main(args: Array[String]): Unit = {
@@ -23,6 +28,10 @@ object Train {
 		    c.copy(modelDbFile = x) } text("Path to model database file which contains the trained model parameters")
 		  arg[Int]("<n-gram size>") optional() action { (x, c) =>
 		    c.copy(ngramSize = x) } text("Size of n-grams to train (defaults to 2)")
+		  opt[Int]('n', "maxlength") optional() action { (x, c) =>
+		    c.copy(maxLength = x) } text("Limit training inputs to domains up to a certain length")
+		  opt[Boolean]('p', "punycode") optional() action { (x, c) =>
+		    c.copy(includePunycode = x) } text("Include Punycode domain names in the training corpus; by default they are excluded")
 		}
 
   	val config = optParser.parse(args, CliOptions()).get
@@ -44,8 +53,12 @@ object Train {
 				while(!eof) {
 					queue.take match {
 						case Some(text) => {
-							markov.learn(text)
-  						count = count + 1
+							if (config.maxLength == -1 || config.maxLength > text.length) {
+								if (config.includePunycode || !text.startsWith("xn--")) {
+									markov.learn(text)
+		  						count = count + 1
+		  					}
+	  					}
 						}
 
 						case None => {
