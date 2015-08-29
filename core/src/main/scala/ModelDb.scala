@@ -3,7 +3,7 @@ package scalydomain.core
 import java.io.File
 import java.security.MessageDigest
 
-import scala.collection.mutable.Map
+import scala.collection._
 import scala.util.Random
 import scala.util.control.Breaks._
 
@@ -16,7 +16,7 @@ import org.fusesource.leveldbjni.JniDBFactory.{factory}
 @Message
 class NgramEntry {
 	var allNextSymbolsSum: Long = 0
-	var nextSymbols: Map[String, Long] = Map.empty
+	var nextSymbols: concurrent.Map[String, Long] = new concurrent.TrieMap()
 }
 
 object ModelDb {
@@ -30,6 +30,7 @@ object ModelDb {
 }
 
 class ModelDb(val path: String) {
+	val ngrams: concurrent.Map[String, NgramEntry] = new concurrent.TrieMap()
 	val file = new File(path)
 	val options = new Options()
 
@@ -38,35 +39,50 @@ class ModelDb(val path: String) {
 	options.blockSize(ModelDb.BlockSize)
 
 	val db = factory.open(file, options)
-	var batch = db.createWriteBatch()
-	var batchSize = 0
+	loadFromDisk()
 
 	def addNgramNextSymbol(ngram: String, nextSymbol: String) {
-		val key = ngram.getBytes("UTF-8")
-		val entry = db.get(key) match {
-			case existingEntryBytes if existingEntryBytes != null => readEntry(existingEntryBytes)
-			case null => {
-				//println(s"Adding new ngram $ngram")
-				new NgramEntry()
+		val entry = getOrAddNgram(ngram)
+
+		//Perform a thread-safe increment of the symbol count
+		//Note how we retry if the underlying value changed
+		var nextSymbolCount = 0l
+		do {
+			//Get the current count, adding a new entry with a zero count if this symbol hasn't
+			//been seen before.  Remember kids, concurrency is hard.
+			nextSymbolCount = entry.nextSymbols.get(nextSymbol) match {
+				case Some(x) => x
+				case None => {
+					entry.nextSymbols.putIfAbsent(nextSymbol, 0l) match {
+						case Some(y) => y
+						case None => 0l
+					}
+				}
 			}
-		}
-
-		entry.nextSymbols(nextSymbol) = entry.nextSymbols.getOrElse(nextSymbol, 0l) + 1l
-		entry.allNextSymbolsSum += 1
-
-		db.put(key, writeEntry(entry))
+		} while (!entry.nextSymbols.replace(nextSymbol, nextSymbolCount, nextSymbolCount + 1))
 	}
 
 	def lookupNgram(ngram: String) =  {
-		db.get(ngram.getBytes()) match {
-			case entry if entry != null => Some(readEntry(entry))
-			case null => None
+		ngrams.get(ngram)
+	}
+
+	def getOrAddNgram(ngram: String) = {
+		ngrams.get(ngram) match {
+			case Some(entry) => entry
+			case None => {
+				//There is no entry for this ngram.  Create a new one and add it to the map, but
+				//bear in mind concurrency is hard, and another thread might do the same thing, so
+				//handle that case
+				val empty = new NgramEntry()
+				ngrams.putIfAbsent(ngram, empty) match {
+					case Some(existingEntry) => existingEntry //Some other thread must have added this when we weren't looking; use what's already there
+					case None => empty //There was nothing in the hash table, so 'empty' was added successfully
+				}
+			}
 		}
 	}
 
 	def close() {
-		db.write(batch)
-		batch.close()
 		db.close()
 	}
 
@@ -76,6 +92,32 @@ class ModelDb(val path: String) {
 
 	def stats() = {
 		println(db.getProperty("leveldb.stats"))
+	}
+
+	def loadFromDisk() {
+		val iter = db.iterator()
+		iter.seekToFirst()
+
+		while (iter.hasNext()) {
+			val key = new String(iter.peekNext().getKey(), "UTF-8")
+			val value = readEntry(iter.peekNext().getValue())
+
+			ngrams(key) = value
+
+			iter.next()
+		}
+	}
+
+	def saveToDisk() {
+		ngrams.foreach { pair =>
+			val (key, entry) = pair
+
+			//Compute the total count of all next symbols prior to writing to disk
+			entry.allNextSymbolsSum = entry.nextSymbols.map(_._2).sum
+
+			//Now write to the database
+			db.put(key.getBytes("UTF-8"), writeEntry(entry))
+		}
 	}
 
 	def readEntry(ser: Array[Byte]) = {

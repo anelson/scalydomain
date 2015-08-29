@@ -19,6 +19,8 @@ case class CliOptions(domainDbFile: File = new File("."),
 )
 
 object Train {
+	val BatchSize = 128 * 1000
+
   def main(args: Array[String]): Unit = {
 		val optParser = new scopt.OptionParser[CliOptions]("train") {
 		  head("train", "SNAPSHOT")
@@ -36,78 +38,40 @@ object Train {
 
   	val config = optParser.parse(args, CliOptions()).get
 
-  	val queue = new LinkedBlockingQueue[Option[String]](ModelDb.WriteBatchSize)
+		println(s"Starting to read ${config.domainDbFile.getPath}")
 
-  	println("Starting writer")
-  	val writer = Future {
-  		println(s"Writing model to ${config.modelDbFile.getPath}")
+		val domainDb = new DomainDb(config.domainDbFile.getPath())
+		println(s"Writing model to ${config.modelDbFile.getPath}")
 
-  		var count: Long = 0
-  		ModelDb.delete(config.modelDbFile.getPath())
-  		val modelDb = new ModelDb(config.modelDbFile.getPath())
-  		val markov = new MarkovChain(modelDb, config.ngramSize)
+		var count: Long = 0
+		ModelDb.delete(config.modelDbFile.getPath())
+		val modelDb = new ModelDb(config.modelDbFile.getPath())
+		val markov = new MarkovChain(modelDb, config.ngramSize)
 
-  		try {
-	  		var eof = false
+		println(s"Commencing training")
+		try {
+			domainDb.domains.grouped(BatchSize).foreach { batch =>
+				batch.par.foreach { pair =>
+					val (hash, name) = pair
 
-				while(!eof) {
-					queue.take match {
-						case Some(text) => {
-							if (config.maxLength == -1 || config.maxLength > text.length) {
-								if (config.includePunycode || !text.startsWith("xn--")) {
-									markov.learn(text)
-		  						count = count + 1
-		  					}
-	  					}
-						}
-
-						case None => {
-							println("Writer shutting down")
-							eof = true
+					if (config.maxLength == -1 || config.maxLength > name.length) {
+						if (config.includePunycode || !name.startsWith("xn--")) {
+							markov.learn(name)
 						}
 					}
 				}
+			}
 
-				println("Compacting domain database")
-				modelDb.compact()
+			println("Persisting model to database")
+			modelDb.saveToDisk()
 
-				println(modelDb.stats)
+			println("Compacting model database")
+			modelDb.compact()
 
-				//modelDb.dump()
-  		} finally {
-  			modelDb.close()
-  		}
-
-  		count
-  	}
-
-  	println("Starting reader")
-  	val reader = Future {
-  			println(s"Starting to read ${config.domainDbFile.getPath}")
-
-  			val domainDb = new DomainDb(config.domainDbFile.getPath())
-  			var count: Long = 0
-
-  			for ((hash, name) <- domainDb.domains) {
-  				queue.put(Some(name))
-  				count = count + 1
-
-  				if (count % 1000000 == 0) {
-  					println(s"Processed $count domains")
-  				}
-  			}
-
-  			println(s"Read $count domains")
-  			count
-  	}
-
-  	println("Waiting for reader to complete")
-  	Await.result(reader, Duration.Inf)
-
-  	println("Waiting for writer to complete")
-  	queue.put(None)
-  	val writeCount = Await.result(writer, Duration.Inf)
-  	println(s"Wrote $writeCount")
+			println(modelDb.stats)
+		} finally {
+			modelDb.close()
+		}
   }
 }
 
