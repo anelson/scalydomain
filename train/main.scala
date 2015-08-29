@@ -43,24 +43,33 @@ object Train {
 		val domainDb = new DomainDb(config.domainDbFile.getPath())
 		println(s"Writing model to ${config.modelDbFile.getPath}")
 
-		var count: Long = 0
 		ModelDb.delete(config.modelDbFile.getPath())
 		val modelDb = new ModelDb(config.modelDbFile.getPath())
 		val markov = new MarkovChain(modelDb, config.ngramSize)
 
 		println(s"Commencing training")
+
+		var domainCount = 0l
 		try {
 			domainDb.domains.grouped(BatchSize).foreach { batch =>
-				batch.par.foreach { pair =>
+				domainCount += batch.par.map { pair =>
 					val (hash, name) = pair
 
-					if (config.maxLength == -1 || config.maxLength > name.length) {
-						if (config.includePunycode || !name.startsWith("xn--")) {
-							markov.learn(name)
-						}
+					if (
+							(config.maxLength == -1 || config.maxLength > name.length) &&
+							(config.includePunycode || !name.startsWith("xn--"))
+						) {
+						markov.learn(name)
+						1
+					} else {
+						0
 					}
-				}
+				}.sum
+
+				println(s"Trained on $domainCount domains")
 			}
+
+			println(s"Training complete; processed $domainCount domains")
 
 			println("Persisting model to database")
 			modelDb.saveToDisk()
