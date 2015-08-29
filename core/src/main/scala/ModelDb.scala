@@ -17,22 +17,6 @@ import org.fusesource.leveldbjni.JniDBFactory.{factory}
 class NgramEntry {
 	var allNextSymbolsSum: Long = 0
 	var nextSymbols: Map[String, Long] = Map.empty
-
-	def chooseNextSymbol(rand: Random): Option[String] = {
-		val index = rand.nextLong() % allNextSymbolsSum
-		var sum = 0l
-
-		nextSymbols.foreach { case (sym, count) =>
-			sum += count
-
-			if (sum > index) {
-				return Some(sym)
-			}
-		}
-
-		assert(false)
-		None
-	}
 }
 
 object ModelDb {

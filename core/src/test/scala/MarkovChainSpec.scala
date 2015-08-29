@@ -2,10 +2,15 @@ package scalydomain.core.test
 
 import java.io.File
 
-import org.scalatest._
-import org.scalactic.TimesOnInt._
+import scala.collection.mutable.Map
+import scala.util.Random
 
-import scalydomain.core.{MarkovChain, ModelDb, DomainDb}
+import org.scalatest._
+
+import org.scalactic.TimesOnInt._
+import org.scalactic.Tolerance._
+
+import scalydomain.core.{MarkovChain, ModelDb, DomainDb, NgramEntry}
 
 class MarkovChainSpec extends UnitSpec with BeforeAndAfterEach {
 	var dbPath: File = _
@@ -66,5 +71,29 @@ class MarkovChainSpec extends UnitSpec with BeforeAndAfterEach {
 				assert(output === "fear" || output === "febr")
 			}
 		}
+	}
+
+	it should "select the most probable next symbol most of the time, in proportion to the actual probability" in {
+		val chain =  new MarkovChain(modelDb, 2)
+		val entry = new NgramEntry()
+
+		entry.allNextSymbolsSum = 11
+		entry.nextSymbols = Map(
+			"aa" -> 10,
+			"zz" -> 1
+		)
+
+		var aaCount: Int = 0
+		var zzCount: Int = 0
+
+		val data = for (i <- 1 to 1000) yield chain.chooseNextSymbol(entry, new Random())
+		assert(data.forall (s => s == "aa" || s == "zz"))
+		aaCount = data.count (s => s == "aa")
+		zzCount = data.count (s => s == "zz")
+
+		val percentAA: Double = aaCount.toDouble / (aaCount + zzCount).toDouble
+
+		assert(aaCount + zzCount === 1000)
+		assert(percentAA === 0.9 +- 0.1)
 	}
 }
