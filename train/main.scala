@@ -94,13 +94,15 @@ object Train {
 
 			for (line <- Source.fromFile(textFile).getLines) {
 				if (config.maxLength == -1 || config.maxLength > line.length) {
-					line match {
-						case re(_*) => {
-							markov.learn(line)
-							inputCount += 1
-						}
+					if (line.length >= config.ngramSize) {
+						line match {
+							case re(_*) => {
+								markov.learn(line)
+								inputCount += 1
+							}
 
-						case _ => skippedCount += 1
+							case _ => skippedCount += 1
+						}
 					}
 				}
 			}
