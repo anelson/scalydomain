@@ -9,8 +9,8 @@ import scala.collection.mutable.SortedSet
 import ExecutionContext.Implicits.global
 
 import scalydomain.core.DomainDb
-import scalydomain.core.ModelDb
-import scalydomain.core.MarkovChain
+import scalydomain.core.ModelDbReader
+import scalydomain.core.MarkovChainGenerator
 
 case class CliOptions(domainDbFile: File = new File("."), modelDbFile: File = new File("."), ngramSize: Int = 2)
 
@@ -28,8 +28,8 @@ object Generate {
 
   	val config = optParser.parse(args, CliOptions()).get
 
-		val modelDb = new ModelDb(config.modelDbFile.getPath())
-		val markov = new MarkovChain(modelDb, config.ngramSize)
+		val modelDb = new ModelDbReader(config.modelDbFile.getPath())
+		val markov = new MarkovChainGenerator(modelDb, config.ngramSize)
 		val domainDb = new DomainDb(config.domainDbFile.getPath())
 		val generatedNames = SortedSet[String]()
 
@@ -40,7 +40,7 @@ object Generate {
 				var generated: String = null
 
 				do {
-					generated = markov.generate(10, "deep")
+					generated = markov.generate(8, "neo")
 				} while (domainDb.domainExists(generated) || generatedNames.contains(generated))
 
 				generatedNames += generated

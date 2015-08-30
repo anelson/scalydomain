@@ -2,24 +2,11 @@ package scalydomain.core
 
 import scala.util.Random
 
-object MarkovChain {
-
-}
-
-class MarkovChain(val db: ModelDb, val n: Int) {
+class MarkovChainGenerator(val db: ModelDbReader, val n: Int) {
 	val Prefix = "^" * n
 	val Suffix = "$" * n
+
 	val rand = new Random()
-
-	//Update the model to reflect the contents of the given word
-	def learn(text: String) {
-		(Prefix + text + Suffix).sliding(n+1).foreach { seg =>
-			val ngram = seg take n
-			val nextSym = seg drop n
-
-			db.addNgramNextSymbol(ngram, nextSym)
-		}
-	}
 
 	def generate(maxLength:Long = -1, withPrefix:String = ""): String = {
 		var next: String = null

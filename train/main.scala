@@ -9,7 +9,8 @@ import ExecutionContext.Implicits.global
 
 import scalydomain.core.DomainDb
 import scalydomain.core.ModelDb
-import scalydomain.core.MarkovChain
+import scalydomain.core.ModelDbWriter
+import scalydomain.core.MarkovChainBuilder
 
 case class CliOptions(domainDbFile: File = new File("."),
 	modelDbFile: File = new File("."),
@@ -44,43 +45,34 @@ object Train {
 		println(s"Writing model to ${config.modelDbFile.getPath}")
 
 		ModelDb.delete(config.modelDbFile.getPath())
-		val modelDb = new ModelDb(config.modelDbFile.getPath())
-		val markov = new MarkovChain(modelDb, config.ngramSize)
+		val modelDb = new ModelDbWriter(config.modelDbFile.getPath())
+		val markov = new MarkovChainBuilder(modelDb, config.ngramSize)
 
 		println(s"Commencing training")
 
 		var domainCount = 0l
-		try {
-			domainDb.domains.grouped(BatchSize).foreach { batch =>
-				domainCount += batch.par.map { pair =>
-					val (hash, name) = pair
+		domainDb.domains.grouped(BatchSize).foreach { batch =>
+			domainCount += batch.par.map { pair =>
+				val (hash, name) = pair
 
-					if (
-							(config.maxLength == -1 || config.maxLength > name.length) &&
-							(config.includePunycode || !name.startsWith("xn--"))
-						) {
-						markov.learn(name)
-						1
-					} else {
-						0
-					}
-				}.sum
+				if (
+						(config.maxLength == -1 || config.maxLength > name.length) &&
+						(config.includePunycode || !name.startsWith("xn--"))
+					) {
+					markov.learn(name)
+					1
+				} else {
+					0
+				}
+			}.sum
 
-				println(s"Trained on $domainCount domains")
-			}
-
-			println(s"Training complete; processed $domainCount domains")
-
-			println("Persisting model to database")
-			modelDb.saveToDisk()
-
-			println("Compacting model database")
-			modelDb.compact()
-
-			println(modelDb.stats)
-		} finally {
-			modelDb.close()
+			println(s"Trained on $domainCount domains")
 		}
+
+		println(s"Training complete; processed $domainCount domains")
+
+		println("Persisting model to database")
+		modelDb.saveToDisk()
   }
 }
 
