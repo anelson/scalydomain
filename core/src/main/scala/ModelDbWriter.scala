@@ -63,18 +63,22 @@ class ModelDbWriter(val path: String) {
 
 		val db = factory.open(file, options)
 
-		ngrams.foreach { pair =>
-			val (key, entry) = pair
+		try {
+			ngrams.foreach { pair =>
+				val (key, entry) = pair
 
-			//Compute the total count of all next symbols prior to writing to disk
-			entry.allNextSymbolsSum = entry.nextSymbols.map(_._2).sum
+				//Compute the total count of all next symbols prior to writing to disk
+				entry.allNextSymbolsSum = entry.nextSymbols.map(_._2).sum
 
-			//Now write to the database
-			db.put(key.getBytes("UTF-8"), writeEntry(entry))
+				//Now write to the database
+				db.put(key.getBytes("UTF-8"), writeEntry(entry))
+			}
+
+			db.compactRange(null, null)
+			//println(db.getProperty("leveldb.stats"))
+		} finally {
+			db.close
 		}
-
-		db.compactRange(null, null)
-		println(db.getProperty("leveldb.stats"))
 	}
 
 	def writeEntry(entry: NgramEntry) = {
