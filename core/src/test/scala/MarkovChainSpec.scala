@@ -6,6 +6,7 @@ import scala.collection.concurrent.TrieMap
 import scala.util.Random
 
 import org.scalatest._
+import Matchers._
 
 import org.scalactic.TimesOnInt._
 import org.scalactic.Tolerance._
@@ -111,5 +112,40 @@ class MarkovChainSpec extends UnitSpec with BeforeAndAfterEach {
 
 		assert(aaCount + zzCount === 1000)
 		assert(percentAA === 0.9 +- 0.1)
+	}
+
+	it should "accurately compute the probability of each state transition in a generated string" in {
+		//Train a simple model of 2-grams, sequences of only two ngrams are possible, with known
+		//probabilities, and verify those probabilities are computed accurately
+		val modelDbWriter = openWriter()
+		val builder =  new MarkovChainBuilder(modelDbWriter, 2)
+
+		//With this corpus:
+		//P(A) = 2/5
+		//P(A|A) = 1
+		//P(a|AA) = 1/2
+		//P(a|AAa) = 1
+		//P(<eof>|AAaa) = 1
+		//
+		//it's similar for the BB sequences
+
+		builder.learn("AAaa")
+		builder.learn("AAbb")
+		builder.learn("BBaa")
+		builder.learn("BBbb")
+		builder.learn("BBbb")
+		modelDbWriter.saveToDisk()
+
+		val modelDbReader = openReader()
+		val generator = new MarkovChainGenerator(modelDbReader, 2)
+
+		generator.computeProbabilities("AAaa").toStream should equal(List(2.0/5.0, 1.0, 0.5, 1.0, 1.0))
+		generator.computeProbabilities("AAbb").toStream should equal(List(2.0/5.0, 1.0, 0.5, 1.0, 1.0))
+		generator.computeProbabilities("BBaa").toStream should equal(List(3.0/5.0, 1.0, 1.0/3.0, 1.0, 1.0))
+		generator.computeProbabilities("BBbb").toStream should equal(List(3.0/5.0, 1.0, 2.0/3.0, 1.0, 1.0))
+
+		//As soon as a sequence deviates from the known states in the model, a 0.0 probability should be injected
+		generator.computeProbabilities("AAzzz").toStream should equal(List(2.0/5.0, 1.0, 0.0))
+		generator.computeProbabilities("foo").toStream should equal(List(0.0))
 	}
 }
