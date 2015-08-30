@@ -23,6 +23,10 @@ class ModelDbReader(val path: String) {
 
 	val db = factory.open(file, options)
 
+	def modelInfo = {
+		ScalaMessagePack.read[ModelInfo](db.get(ModelDb.ModelInfoKey))
+	}
+
 	def lookupNgram(ngram: String) =  {
 		db.get(ngram.getBytes()) match {
 			case entry if entry != null => Some(readEntry(entry))

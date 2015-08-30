@@ -15,7 +15,6 @@ import scalydomain.core.MarkovChainGenerator
 
 case class CliOptions(domainDbFile: File = new File("."),
 	modelDbFile: File = new File("."),
-	ngramSize: Int = -1,
 	prefix: String = "",
 	maxLength: Int = -1,
 	domainsToGenerate: Int = 20,
@@ -45,8 +44,6 @@ object Generate {
 		    c.copy(domainDbFile = x) } text("Path to domain database file which contains list of taken domain names")
 		  opt[File]('m', "modeldb") required() action { (x, c) =>
 		    c.copy(modelDbFile = x) } text("Path to model database file which contains the trained model parameters")
-		  opt[Int]('n', "ngram") required() action { (x, c) =>
-		    c.copy(ngramSize = x) } text("Size of n-grams used to train the model")
 		  opt[String]('p', "prefix") optional() action { (x, c) =>
 		    c.copy(prefix = x) } text("Generate only domain names that start with this prefix")
 		  opt[Int]('l', "maxlength") optional() action { (x, c) =>
@@ -62,9 +59,10 @@ object Generate {
   	val config = optParser.parse(args, CliOptions()).get
 
 		val modelDb = new ModelDbReader(config.modelDbFile.getPath())
-		val markov = new MarkovChainGenerator(modelDb, config.ngramSize)
+		val markov = new MarkovChainGenerator(modelDb)
 		val domainDb = new DomainDb(config.domainDbFile.getPath())
 		val generatedNames = SortedSet[String]()
+		val ngramSize = modelDb.modelInfo.n
 
 		try {
 			println("Generating domain names")
@@ -76,11 +74,11 @@ object Generate {
 
 			acceptableDomains.take(config.domainsToGenerate).foreach { domain =>
 				generatedNames += domain
-				val p = markov.computeProbabilities(domain).toArray
+				val p = markov.computeNgramProbabilities(domain).toArray
 				val score = p.min
-				val charProbabilities = (domain+"$").zip(p).map { case (c, prob) => f"P($c)=$prob%4f" }.mkString(",")
+				val ngramProbabilities = domain.sliding(ngramSize).toArray.zip(p).map { case (ngram, prob) => f"P($ngram)=$prob%6f" }.mkString(",")
 
-				println(f"\t$domain\t$score%4f\t$charProbabilities")
+				println(f"\t$domain\t$score%6f\t$ngramProbabilities")
 			}
 		} finally {
 			domainDb.close

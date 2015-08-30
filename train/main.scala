@@ -111,7 +111,7 @@ object Train {
   	}
 
 		println("Persisting model to database")
-		modelDb.saveToDisk()
+		modelDb.saveToDisk(config.ngramSize)
 	}
 }
 

@@ -66,3 +66,4 @@ This shows the problem perfectly.  That final sequence `hos` in `abmhos` is very
 
 Maybe looking at per-character probabilities is the wrong answer.  Maybe I should be looking at per n-gram probabilities.  The model doesn't currently capture that data but I easily could start to include it.  Let's try.
 
+		> sbt "generate/run --domaindb data/domain --modeldb data/dict-markov-4 --count 10 --maxlength 6 --include abmhos,whoppy,spist,outbeg,scopid,unsed,ungaio"

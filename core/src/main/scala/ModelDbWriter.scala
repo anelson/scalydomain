@@ -1,11 +1,12 @@
 package scalydomain.core
 
-import java.io.File
-import java.security.MessageDigest
-
 import scala.collection._
 import scala.util.Random
 import scala.util.control.Breaks._
+
+import java.io.File
+import java.security.MessageDigest
+import java.util.concurrent.atomic._
 
 import org.msgpack.annotation.Message
 import org.msgpack.ScalaMessagePack
@@ -54,7 +55,11 @@ class ModelDbWriter(val path: String) {
 		}
 	}
 
-	def saveToDisk() {
+	def incrementNgramOccurrenceCount(ngram: String) {
+		getOrAddNgram(ngram).occurrenceCount.getAndIncrement()
+	}
+
+	def saveToDisk(ngramSize: Int) {
 		val options = new Options()
 
 		options.createIfMissing(true)
@@ -64,11 +69,20 @@ class ModelDbWriter(val path: String) {
 		val db = factory.open(file, options)
 
 		try {
+			val info = new ModelInfo()
+			info.n = ngramSize
+			info.totalOccurrenceCount = ngrams.map(_._2.occurrenceCount.get).sum
+
+			db.put(ModelDb.ModelInfoKey, ScalaMessagePack.write(info))
+
 			ngrams.foreach { pair =>
 				val (key, entry) = pair
 
 				//Compute the total count of all next symbols prior to writing to disk
 				entry.allNextSymbolsSum = entry.nextSymbols.map(_._2).sum
+
+				//Compute the probability of this ngram appearing in the training corpus
+				entry.p = entry.occurrenceCount.get.toDouble / info.totalOccurrenceCount.toDouble
 
 				//Now write to the database
 				db.put(key.getBytes("UTF-8"), writeEntry(entry))
