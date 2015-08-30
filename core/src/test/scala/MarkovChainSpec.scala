@@ -145,7 +145,8 @@ class MarkovChainSpec extends UnitSpec with BeforeAndAfterEach {
 		generator.computeProbabilities("BBbb").toStream should equal(List(3.0/5.0, 1.0, 2.0/3.0, 1.0, 1.0))
 
 		//As soon as a sequence deviates from the known states in the model, a 0.0 probability should be injected
-		generator.computeProbabilities("AAzzz").toStream should equal(List(2.0/5.0, 1.0, 0.0))
-		generator.computeProbabilities("foo").toStream should equal(List(0.0))
+		generator.computeProbabilities("AAzzz").toStream should equal(List(2.0/5.0, 1.0, 0.0, 0.0, 0.0, 0.0))
+		generator.computeProbabilities("foo").toStream should equal(List(0.0, 0.0, 0.0, 0.0))
+		generator.computeProbabilities("baa").toStream should equal(List(0.0, 0.0, 0.0, 1.0))
 	}
 }
