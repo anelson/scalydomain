@@ -77,7 +77,7 @@ object Generate {
 			acceptableDomains.take(config.domainsToGenerate).foreach { domain =>
 				generatedNames += domain
 				val p = markov.computeProbabilities(domain).toArray
-				val score = p.sum / p.length
+				val score = p.min
 				val charProbabilities = (domain+"$").zip(p).map { case (c, prob) => f"P($c)=$prob%4f" }.mkString(",")
 
 				println(f"\t$domain\t$score%4f\t$charProbabilities")
