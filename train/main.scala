@@ -5,6 +5,7 @@ import java.util.concurrent.{BlockingQueue, LinkedBlockingQueue}
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
+import scala.io.Source
 import ExecutionContext.Implicits.global
 
 import scalydomain.core.DomainDb
@@ -12,7 +13,8 @@ import scalydomain.core.ModelDb
 import scalydomain.core.ModelDbWriter
 import scalydomain.core.MarkovChainBuilder
 
-case class CliOptions(domainDbFile: File = new File("."),
+case class CliOptions(domainDbFile: Option[File] = None,
+	textFile: Option[File] = None,
 	modelDbFile: File = new File("."),
 	ngramSize: Int = 2,
 	maxLength: Int = -1,
@@ -25,23 +27,30 @@ object Train {
   def main(args: Array[String]): Unit = {
 		val optParser = new scopt.OptionParser[CliOptions]("train") {
 		  head("train", "SNAPSHOT")
-		  arg[File]("<domain db file>") required() action { (x, c) =>
-		    c.copy(domainDbFile = x) } text("Path to domain database file which contains training corpus")
-		  arg[File]("<model db file>") required() action { (x, c) =>
+		  opt[File]('d', "domaindb") optional() action { (x, c) =>
+		    c.copy(domainDbFile = Some(x)) } text("Path to domain database file which contains list of taken domain names")
+		  opt[File]('t', "textfile") optional() action { (x, c) =>
+		    c.copy(textFile = Some(x)) } text("Path to text file with training corpus, one word per line")
+		  opt[File]('m', "modeldb") required() action { (x, c) =>
 		    c.copy(modelDbFile = x) } text("Path to model database file which contains the trained model parameters")
-		  arg[Int]("<n-gram size>") optional() action { (x, c) =>
+		  opt[Int]('n', "ngram") required() action { (x, c) =>
 		    c.copy(ngramSize = x) } text("Size of n-grams to train (defaults to 2)")
 		  opt[Int]('n', "maxlength") optional() action { (x, c) =>
 		    c.copy(maxLength = x) } text("Limit training inputs to domains up to a certain length")
 		  opt[Boolean]('p', "punycode") optional() action { (x, c) =>
 		    c.copy(includePunycode = x) } text("Include Punycode domain names in the training corpus; by default they are excluded")
+
+	    checkConfig { c =>
+	    	if (c.domainDbFile.isEmpty && c.textFile.isEmpty) {
+	    		failure("must specify either a domain database file or a text file to train from")
+	    	} else {
+	    		success
+	    	}
+	    }
 		}
 
   	val config = optParser.parse(args, CliOptions()).get
 
-		println(s"Starting to read ${config.domainDbFile.getPath}")
-
-		val domainDb = new DomainDb(config.domainDbFile.getPath())
 		println(s"Writing model to ${config.modelDbFile.getPath}")
 
 		ModelDb.delete(config.modelDbFile.getPath())
@@ -50,29 +59,57 @@ object Train {
 
 		println(s"Commencing training")
 
-		var domainCount = 0l
-		domainDb.domains.grouped(BatchSize).foreach { batch =>
-			domainCount += batch.par.map { pair =>
-				val (hash, name) = pair
+		config.domainDbFile foreach { domainDbFile =>
+			var inputCount = 0l
+			println(s"Starting to read ${domainDbFile.getPath}")
+			val domainDb = new DomainDb(domainDbFile.getPath())
 
-				if (
-						(config.maxLength == -1 || config.maxLength > name.length) &&
-						(config.includePunycode || !name.startsWith("xn--"))
-					) {
-					markov.learn(name)
-					1
-				} else {
-					0
-				}
-			}.sum
+			domainDb.domains.grouped(BatchSize).foreach { batch =>
+				inputCount += batch.par.map { pair =>
+					val (hash, name) = pair
 
-			println(s"Trained on $domainCount domains")
+					if (
+							(config.maxLength == -1 || config.maxLength > name.length) &&
+							(config.includePunycode || !name.startsWith("xn--"))
+						) {
+						markov.learn(name)
+						1
+					} else {
+						0
+					}
+				}.sum
+
+				println(s"Trained on $inputCount domains")
+			}
+
+			println(s"Training complete; processed $inputCount domains")
 		}
 
-		println(s"Training complete; processed $domainCount domains")
+	  config.textFile foreach { textFile =>
+  		var inputCount = 0l
+  		var skippedCount = 0l
+
+  		//Only include lines that are valid domain names, meaning no whitespace or punctuation
+  		var re = """^[\w\-]+$""".r
+
+			for (line <- Source.fromFile(textFile).getLines) {
+				if (config.maxLength == -1 || config.maxLength > line.length) {
+					line match {
+						case re(_*) => {
+							markov.learn(line)
+							inputCount += 1
+						}
+
+						case _ => skippedCount += 1
+					}
+				}
+			}
+
+			println(s"Training complete; processed $inputCount words ($skippedCount invalid lines skipped)")
+  	}
 
 		println("Persisting model to database")
 		modelDb.saveToDisk()
-  }
+	}
 }
 
