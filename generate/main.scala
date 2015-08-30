@@ -19,7 +19,8 @@ case class CliOptions(domainDbFile: File = new File("."),
 	prefix: String = "",
 	maxLength: Int = -1,
 	domainsToGenerate: Int = 20,
-	pattern: Option[Regex] = None)
+	pattern: Option[Regex] = None,
+	includeWords: String = "")
 
 object Generate {
 	def compilePattern(pattern: String) = {
@@ -54,6 +55,8 @@ object Generate {
 		    c.copy(domainsToGenerate = x) } text("Generate this many domains")
 		  opt[String]('f', "pattern") optional() action { (x, c) =>
 		    c.copy(pattern = compilePattern(x)) } text("Generate domains that match this pattern (LNCV plus regex)")
+		  opt[String]('i', "include") optional() action { (x, c) =>
+		    c.copy(includeWords = x) } text("Include these words in the generated output")
 		}
 
   	val config = optParser.parse(args, CliOptions()).get
@@ -66,15 +69,18 @@ object Generate {
 		try {
 			println("Generating domain names")
 
-			(0 to config.domainsToGenerate).foreach { _ =>
-				var generated: String = null
+			val markovGeneratedDomains = Stream.continually { markov.generate(config.maxLength, config.prefix) }
+			val userSpecifiedDomains = config.includeWords.split(",")
+			val domainHose = userSpecifiedDomains.toStream #::: markovGeneratedDomains
+			val acceptableDomains = domainHose.filter(acceptableDomain(config, domainDb, generatedNames, _))
 
-				do {
-					generated = markov.generate(config.maxLength, config.prefix)
-				} while (!acceptableDomain(config, domainDb, generatedNames, generated))
+			acceptableDomains.take(config.domainsToGenerate).foreach { domain =>
+				generatedNames += domain
+				val p = markov.computeProbabilities(domain).toArray
+				val score = p.sum / p.length
+				val charProbabilities = (domain+"$").zip(p).map { case (c, prob) => f"P($c)=$prob%4f" }.mkString(",")
 
-				generatedNames += generated
-				println(s"Generated available domain $generated")
+				println(f"\t$domain\t$score%4f\t$charProbabilities")
 			}
 		} finally {
 			domainDb.close
