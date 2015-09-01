@@ -87,7 +87,7 @@ object Generate {
 		try {
 			println("Generating domain names")
 
-			val domainHose = markovGenerator(config, markov) #::: wordlistGenerator(config) #::: config.includeWords.split(",").filter(_.length > 0).toStream
+			val domainHose = config.includeWords.split(",").filter(_.length > 0).toStream #::: wordlistGenerator(config) #::: markovGenerator(config, markov)
 			val acceptableDomains = domainHose.filter(acceptableDomain(config, domainDb, generatedNames, _))
 			val domainsWithScores = acceptableDomains.map { domain =>
 				val p: Array[Double] = markov match {
