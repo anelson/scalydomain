@@ -6,6 +6,7 @@ import scala.concurrent._
 import scala.concurrent.duration._
 import scala.collection.JavaConversions._
 import scala.collection.mutable.SortedSet
+import scala.io.Source
 import scala.math.pow
 import scala.util.matching.Regex
 import ExecutionContext.Implicits.global
@@ -15,7 +16,8 @@ import scalydomain.core.ModelDbReader
 import scalydomain.core.MarkovChainGenerator
 
 case class CliOptions(domainDbFile: File = new File("."),
-	modelDbFile: File = new File("."),
+	modelDbFile: Option[File] = None,
+	wordListFile: Option[File] = None,
 	prefix: String = "",
 	maxLength: Int = -1,
 	domainsToGenerate: Int = 20,
@@ -44,8 +46,10 @@ object Generate {
 		  head("generate", "SNAPSHOT")
 		  opt[File]('d', "domaindb") required() action { (x, c) =>
 		    c.copy(domainDbFile = x) } text("Path to domain database file which contains list of taken domain names")
-		  opt[File]('m', "modeldb") required() action { (x, c) =>
-		    c.copy(modelDbFile = x) } text("Path to model database file which contains the trained model parameters")
+		  opt[File]('m', "modeldb") optional() action { (x, c) =>
+		    c.copy(modelDbFile = Some(x)) } text("Use the Markov model at this location to generate domains")
+		  opt[File]('w', "wordlist") optional() action { (x, c) =>
+		    c.copy(wordListFile = Some(x)) } text("Use the Markov model at this location to generate domains")
 		  opt[String]('p', "prefix") optional() action { (x, c) =>
 		    c.copy(prefix = x) } text("Generate only domain names that start with this prefix")
 		  opt[Int]('l', "maxlength") optional() action { (x, c) =>
@@ -58,27 +62,39 @@ object Generate {
 		    c.copy(includeWords = x) } text("Include these words in the generated output")
 		  opt[Unit]('s', "sort") optional() action { (x, c) =>
 		    c.copy(sort = true) } text("Sort output with highest score first")
+	    checkConfig { c =>
+	    	(c.modelDbFile, c.wordListFile) match {
+	    		case (Some(_), None) | (None, Some(_)) => success
+	    		case (Some(_), Some(_)) => failure("either a modeldb or wordlist must be specified, but not both")
+	    		case (None, None) => failure("must specify either a modeldb or wordlist")
+	    	}
+	    }
 		}
 
   	val config = optParser.parse(args, CliOptions()).get
-
-		val modelDb = new ModelDbReader(config.modelDbFile.getPath())
-		val markov = new MarkovChainGenerator(modelDb)
 		val domainDb = new DomainDb(config.domainDbFile.getPath())
+		val markov = config.modelDbFile match {
+  		case Some(modelDbFile) => {
+				val modelDb = new ModelDbReader(modelDbFile.getPath())
+				Some(new MarkovChainGenerator(modelDb))
+  		}
+
+  		case None => None
+		}
+
 		val generatedNames = SortedSet[String]()
-		val ngramSize = modelDb.modelInfo.n
 
 		try {
 			println("Generating domain names")
 
-			val markovGeneratedDomains = Stream.continually { markov.generate(config.maxLength, config.prefix) }
-			val userSpecifiedDomains = config.includeWords.split(",").filter(_.length > 0)
-			val domainHose = userSpecifiedDomains.toStream #::: markovGeneratedDomains
+			val domainHose = markovGenerator(config, markov) #::: wordlistGenerator(config) #::: config.includeWords.split(",").filter(_.length > 0).toStream
 			val acceptableDomains = domainHose.filter(acceptableDomain(config, domainDb, generatedNames, _))
 			val domainsWithScores = acceptableDomains.map { domain =>
-				val p = markov.computeCharacterProbabilities(domain).toArray
-				//val score = p.foldLeft(1.0)(_*_)
-				//val score = p.map(pow(_, 2)).foldLeft(1.0)(_*_)
+				val p: Array[Double] = markov match {
+					case Some(markovGenerator) => markovGenerator.computeCharacterProbabilities(domain).toArray
+					case None => Array()
+				}
+
 				val scores = p.sorted
 
 				val charProbabilities = (domain+"$").zip(p).map { case (c, prob) => f"P($c)=$prob%4f" }.mkString(",")
@@ -106,7 +122,32 @@ object Generate {
 			}
 		} finally {
 			domainDb.close
-			modelDb.close
+		}
+  }
+
+  def markovGenerator(config: CliOptions, markov: Option[MarkovChainGenerator]): Stream[String] = {
+  	markov match {
+  		case Some(markovGenerator) => Stream.continually { markovGenerator.generate(config.maxLength, config.prefix) }
+  		case None => Stream.empty
+  	}
+  }
+
+  def wordlistGenerator(config: CliOptions): Stream[String] = {
+  	config.wordListFile match {
+  		case Some(wordListFile) => {
+				//Only include lines that are valid domain names, meaning no whitespace or punctuation
+				var re = """^\w([\w\-]*\w)?$""".r
+
+				val lines = for (line <- Source.fromFile(wordListFile).getLines) yield line.toLowerCase
+
+				lines.collect { line =>
+					line match {
+						case re(_*) if (config.maxLength == -1 || config.maxLength >= config.prefix.length + line.length) && line.length > 1 => config.prefix + line
+					}
+				}.toStream
+			}
+
+			case None => Stream.empty
 		}
   }
 
