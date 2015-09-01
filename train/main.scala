@@ -90,14 +90,14 @@ object Train {
   		var skippedCount = 0l
 
   		//Only include lines that are valid domain names, meaning no whitespace or punctuation
-  		var re = """^[\w\-]+$""".r
+  		var re = """^\w[\w\-]*$""".r
 
 			for (line <- Source.fromFile(textFile).getLines) {
 				if (config.maxLength == -1 || config.maxLength > line.length) {
 					if (line.length >= config.ngramSize) {
 						line match {
 							case re(_*) => {
-								markov.learn(line)
+								markov.learn(line.toLowerCase)
 								inputCount += 1
 							}
 
